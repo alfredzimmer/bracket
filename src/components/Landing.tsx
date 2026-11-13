@@ -168,7 +168,7 @@ export function Landing({ b }: { b: BracketState }) {
         <h1>Bet where prices <em>settle</em>.</h1>
         <p className="lede">
           Pick {hedged.length ? hedged.join(', ').replace(/, ([^,]*)$/, ' or $1') : 'an asset'} and draw a range. If the price lands inside it on the date
-          you pick, you get paid. Odds come straight from the options market, so you get a fair price without touching an option yourself.
+          you pick, you get paid.
         </p>
         {series.length
           ? <RangeHero key={sym} sym={sym} series={series} now={now} assetPicker={assetPicker} />
