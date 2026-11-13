@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { densityFn, inRangeOfStrikes, rangeQuote } from '../../shared/options.ts';
+import { ASSET_BY_SYM } from '../../shared/markets.ts';
 import { niceStep } from '../../shared/pricing.ts';
 import type { OptSeriesInfo } from '../../shared/types.ts';
-import { fmtPx, fmtWhen, pct, signedPct, usd } from '../format.ts';
+import { decimalsFor, fmtPx, fmtWhen, pct, signedPct, usd } from '../format.ts';
 import type { BracketState } from '../hooks.ts';
 import { Wordmark } from './Nav.tsx';
 
@@ -16,22 +17,25 @@ export interface PendingRange { sym: string; series: string; lo: number; hi: num
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
 /**
- * The hero: BTC's settlement distribution for one expiry, implied by Derive's options. Drag the braces to set a range
- * and the quote updates live, priced exactly as the terminal prices it.
+ * The hero: an asset's settlement distribution for one expiry, implied by Derive's options. Drag the braces to set a
+ * range and the quote updates live, priced exactly as the terminal prices it.
  */
-function RangeHero({ series, now }: { series: OptSeriesInfo[]; now: number }) {
+function RangeHero({ sym, series, now, assetPicker }: { sym: string; series: OptSeriesInfo[]; now: number; assetPicker: ReactNode }) {
   const [key, setKey] = useState(() => (series.find(s => s.expiry - now > 2 * 24 * H) ?? series[0]).key);
   const s = series.find(x => x.key === key) ?? series[0];
   const c = s.curve;
   const sd = c.fwd * c.atmIv * Math.sqrt(Math.max(s.expiry - now, 60_000) / YEAR_MS);
   const step = niceStep(sd / 8);
-  const snap = (v: number) => Math.round(v / step) * step;
+  const dec = Math.max(ASSET_BY_SYM[sym]?.dec ?? 0, decimalsFor(step));
+  const snap = (v: number) => Number((Math.round(v / step) * step).toFixed(dec));
   const [range, setRange] = useState<{ lo: number; hi: number } | null>(null);
   useEffect(() => setRange(null), [key]);
   const lo = range?.lo ?? snap(c.fwd - sd * 0.5), hi = range?.hi ?? snap(c.fwd + sd * 0.5);
 
   const W = 1000, PH = 230, BASE = 210;
-  const x0 = c.fwd - 3 * sd, x1 = c.fwd + 3 * sd;
+  // Plot ±3σ, but only where listed strikes give the market's view (no data beyond the outer strikes).
+  const ks = c.strikes;
+  const x0 = Math.max(c.fwd - 3 * sd, (ks[0] + ks[1]) / 2), x1 = Math.min(c.fwd + 3 * sd, (ks.at(-2)! + ks.at(-1)!) / 2);
   const X = (v: number) => ((v - x0) / (x1 - x0)) * W;
   const inv = (px: number) => x0 + (px / W) * (x1 - x0);
   const dens = densityFn(c);
@@ -68,7 +72,7 @@ function RangeHero({ series, now }: { series: OptSeriesInfo[]; now: number }) {
     setRange(which === 'lo' ? { lo: Math.min(lo + d * step, hi - step), hi } : { lo, hi: Math.max(hi + d * step, lo + step) });
 
   const go = () => {
-    const p: PendingRange = { sym: 'BTC', series: s.key, lo, hi };
+    const p: PendingRange = { sym, series: s.key, lo, hi };
     try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch {}
     location.hash = '#trade';
   };
@@ -76,6 +80,7 @@ function RangeHero({ series, now }: { series: OptSeriesInfo[]; now: number }) {
   return (
     <div className="picker">
       <div className="picker-top">
+        {assetPicker}
         <div className="exp-pills" role="radiogroup" aria-label="Settlement date">
           {series.slice(0, 6).map(x => (
             <button key={x.key} role="radio" aria-checked={x.key === s.key} className={x.key === s.key ? 'on' : ''} onClick={() => setKey(x.key)}>
@@ -83,13 +88,13 @@ function RangeHero({ series, now }: { series: OptSeriesInfo[]; now: number }) {
             </button>
           ))}
         </div>
-        <span className="muted small">BTC now <b className="num">{fmtPx(c.fwd, 0)}</b> · settles {fmtWhen(s.expiry)}</span>
+        <span className="muted small">{sym} now <b className="num">{fmtPx(c.fwd, dec)}</b> · settles {fmtWhen(s.expiry)}</span>
       </div>
 
       <svg
         ref={svg} viewBox={`0 0 ${W} ${PH}`} preserveAspectRatio="none" className="picker-svg"
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}
-        role="img" aria-label={`BTC settlement distribution with the range ${fmtPx(lo, 0)} to ${fmtPx(hi, 0)} selected. Drag to change it.`}
+        role="img" aria-label={`${sym} settlement distribution with the range ${fmtPx(lo, dec)} to ${fmtPx(hi, dec)} selected. Drag to change it.`}
       >
         <path className="pk-dist" d={area(x0, x1)} />
         <path className="pk-in" d={area(Math.max(lo, x0), Math.min(hi, x1))} />
@@ -103,22 +108,22 @@ function RangeHero({ series, now }: { series: OptSeriesInfo[]; now: number }) {
         <span style={{ left: `${(X(hi) / W) * 100}%` }}>{'}'}</span>
       </div>
       <div className="pk-axis num" aria-hidden="true">
-        {[-2, -1, 0, 1, 2].map(k => {
+        {[-2, -1, 0, 1, 2].filter(k => c.fwd + k * sd > x0 && c.fwd + k * sd < x1).map(k => {
           const v = c.fwd + k * sd;
-          return <span key={k} style={{ left: `${(X(v) / W) * 100}%` }}>{fmtPx(snap(v), 0)}</span>;
+          return <span key={k} style={{ left: `${(X(v) / W) * 100}%` }}>{fmtPx(snap(v), dec)}</span>;
         })}
       </div>
 
       <div className="picker-foot">
         <div className="pk-range">
-          <span className="small muted">BTC settles inside</span>
+          <span className="small muted">{sym} settles inside</span>
           <div className="pk-bounds num">
             <button aria-label="Lower the lower bound" onClick={() => nudge('lo', -1)}>−</button>
-            <span>{fmtPx(lo, 0)}</span>
+            <span>{fmtPx(lo, dec)}</span>
             <button aria-label="Raise the lower bound" onClick={() => nudge('lo', 1)}>+</button>
             <span className="muted">–</span>
             <button aria-label="Lower the upper bound" onClick={() => nudge('hi', -1)}>−</button>
-            <span>{fmtPx(hi, 0)}</span>
+            <span>{fmtPx(hi, dec)}</span>
             <button aria-label="Raise the upper bound" onClick={() => nudge('hi', 1)}>+</button>
           </div>
         </div>
@@ -133,9 +138,18 @@ function RangeHero({ series, now }: { series: OptSeriesInfo[]; now: number }) {
 }
 
 export function Landing({ b }: { b: BracketState }) {
+  const [sym, setSym] = useState('BTC');
   const now = b.now;
-  const btc = b.opt.filter(s => s.sym === 'BTC' && s.open);
-  const spot = b.assets.find(a => a.sym === 'BTC');
+  const hedged = [...new Set(b.opt.filter(s => s.open).map(s => s.sym))];
+  const series = b.opt.filter(s => s.sym === sym && s.open);
+  const spot = b.assets.find(a => a.sym === sym);
+  const assetPicker = (
+    <div className="asset-pills" role="radiogroup" aria-label="Asset">
+      {hedged.map(x => (
+        <button key={x} role="radio" aria-checked={x === sym} className={x === sym ? 'on' : ''} onClick={() => setSym(x)}>{x}</button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="landing">
@@ -143,7 +157,7 @@ export function Landing({ b }: { b: BracketState }) {
         <Wordmark />
         <nav>
           {spot && spot.price > 0 && (
-            <span className="lp-px num">BTC {fmtPx(spot.price, 0)} <span className={spot.chg24h >= 0 ? 'up' : 'down'}>{signedPct(spot.chg24h)}</span></span>
+            <span className="lp-px num">{sym} {fmtPx(spot.price, spot.dec)} <span className={spot.chg24h >= 0 ? 'up' : 'down'}>{signedPct(spot.chg24h)}</span></span>
           )}
           <a href="#desk">Desk</a>
           <a className="btn small-btn" href="#trade">Open app</a>
@@ -151,13 +165,13 @@ export function Landing({ b }: { b: BracketState }) {
       </header>
 
       <section className="hero">
-        <h1>Bet where bitcoin <em>settles</em>.</h1>
+        <h1>Bet where prices <em>settle</em>.</h1>
         <p className="lede">
-          Draw a range. If BTC's price lands inside it on the date you pick, you get paid. Odds come straight from the options
-          market, so you get a fair price without touching an option yourself.
+          Pick {hedged.length ? hedged.join(', ').replace(/, ([^,]*)$/, ' or $1') : 'an asset'} and draw a range. If the price lands inside it on the date
+          you pick, you get paid. Odds come straight from the options market, so you get a fair price without touching an option yourself.
         </p>
-        {btc.length
-          ? <RangeHero series={btc} now={now} />
+        {series.length
+          ? <RangeHero key={sym} sym={sym} series={series} now={now} assetPicker={assetPicker} />
           : <div className="picker loading muted">Loading live option prices…</div>}
       </section>
 

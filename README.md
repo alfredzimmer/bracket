@@ -1,7 +1,7 @@
 # { bracket }
 
-Bet on where bitcoin settles. Pick a date, draw a price range, and if BTC's settlement price lands inside it
-(or outside it, if you bet that way) you get paid stake × multiplier.
+Bet where prices settle. Pick BTC, ETH or SOL and a date, draw a price range, and if the settlement price lands inside
+it (or outside it, if you bet that way) you get paid stake × multiplier.
 
 The odds come from the real options market. Behind the scenes the house turns every bet into a set of
 [Derive](https://derive.xyz) options, nets everyone's bets against each other, and hedges whatever risk is left over.
@@ -25,7 +25,7 @@ Open http://localhost:5173.
 
 | Page | URL | What it is |
 | --- | --- | --- |
-| Landing | `/` | Drag a range on BTC's live distribution and see the payout |
+| Landing | `/` | Pick an asset, drag a range on its live distribution, and see the payout |
 | Trade | `/#trade` | The trading terminal |
 | Desk | `/#desk` | Behind the scenes: the house's book, its hedges, and hedging costs |
 
