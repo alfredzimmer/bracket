@@ -271,6 +271,17 @@ setInterval(() => {
 
 server.listen(config.port, () => console.log(`[boot] Bracket API on http://localhost:${config.port}`));
 
+// Requests to our own public URL count as visitors, which keeps a free host from sleeping.
+if (config.prod && config.keepAliveUrl) {
+  const url = `${config.keepAliveUrl.replace(/\/$/, '')}/api/markets`;
+  setInterval(() => {
+    fetch(url, { signal: AbortSignal.timeout(20_000) })
+      .then(r => { if (!r.ok) console.warn(`[keepalive] ${url}: HTTP ${r.status}`); })
+      .catch(e => console.warn(`[keepalive] ${url}: ${(e as Error).message}`));
+  }, config.keepAliveMs).unref();
+  console.log(`[keepalive] pinging ${url} every ${config.keepAliveMs / 60_000} min`);
+}
+
 function shutdown() {
   saveSimState();
   server.close();

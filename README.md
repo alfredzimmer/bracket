@@ -130,8 +130,11 @@ pool couldn't cover every open payout at once.
 It builds with `pnpm build`, starts with `pnpm start`, and redeploys on every push to `main`.
 
 Two things to know about the free tier:
-- **It sleeps.** After 15 minutes without visitors it spins down, and the next visit takes about a minute to wake it.
-- **Data resets.** It has no permanent disk, so paper accounts and bets reset when it sleeps or redeploys.
+- **It would sleep, so it pings itself.** Render's free tier spins down after 15 minutes without visitors. In
+  production the server requests its own public URL (`RENDER_EXTERNAL_URL`, which Render sets) every 10 minutes, which
+  counts as a visit. Running 24/7 uses ~744 of the 750 free hours a month, so keep this the only free service on the account.
+  Set `KEEPALIVE_URL=off` to stop it. If it ever does sleep, the next visit takes about a minute.
+- **Data resets.** It has no permanent disk, so paper accounts and bets reset whenever it restarts or redeploys.
   Visitors simply get a fresh 10,000 USDC.
 
 Vercel isn't an option as-is: it runs short-lived functions, and this server needs to stay running for its live feeds,
@@ -199,6 +202,7 @@ All optional, set as environment variables.
 | `RISK_LIMIT` | `10000` | Worst-case loss per expiry before the hedger acts (try `2000` to see it trade) |
 | `OPT_MAX_DAYS` | `30` | Furthest Derive expiry offered |
 | `OPT_OFF` | unset | `1` turns off Derive/Hypercall (practice markets only, works offline) |
+| `KEEPALIVE_URL` | `RENDER_EXTERNAL_URL` | URL the production server pings every 10 min to stay awake on a free host; `off` disables it |
 | `HYPERCALL_OFF` | unset | `1` stops polling Hypercall (set on the public deploy, since its terms bar redistributing its data) |
 | `SIM_ONLY` | unset | `1` simulates every market instead of using Coinbase |
 | `SAMPLE_MS` / `SAMPLE_KEEP_DAYS` | `600000` / `14` | Hedge-cost sampling interval and retention (~3 MB a day) |

@@ -39,6 +39,13 @@ export const config = {
   /** Worst-case loss per series (USDC) above which the shadow hedger trades. */
   riskLimit: num(process.env.RISK_LIMIT, 10_000),
   hedgeEveryMs: 30_000,
+  /**
+   * Public URL to ping so a free host doesn't put the server to sleep (Render's free tier sleeps after 15 minutes
+   * without inbound traffic). Render sets RENDER_EXTERNAL_URL itself; KEEPALIVE_URL overrides it, and KEEPALIVE_URL=off
+   * disables pinging.
+   */
+  keepAliveUrl: process.env.KEEPALIVE_URL === 'off' ? undefined : process.env.KEEPALIVE_URL ?? process.env.RENDER_EXTERNAL_URL,
+  keepAliveMs: 10 * 60_000,
   /** Settlement prices not published this long after expiry refund the series. */
   optVoidAfterMs: 24 * 3_600_000,
 };
