@@ -14,15 +14,28 @@ export const PENDING_KEY = 'bracket.pending';
 /** A range picked on the landing page, handed to the terminal. */
 export interface PendingRange { sym: string; series: string; lo: number; hi: number }
 
-const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const wkFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+/** "Sat 14", regardless of locale ordering. */
+const dayLabel = (t: number) => `${wkFmt.format(t)} ${new Date(t).getDate()}`;
 
 /**
  * The hero: an asset's settlement distribution for one expiry, implied by Derive's options. Drag the braces to set a
  * range and the quote updates live, priced exactly as the terminal prices it.
  */
-function RangeHero({ sym, series, now, assetPicker }: { sym: string; series: OptSeriesInfo[]; now: number; assetPicker: ReactNode }) {
-  const [key, setKey] = useState(() => (series.find(s => s.expiry - now > 2 * 24 * H) ?? series[0]).key);
-  const s = series.find(x => x.key === key) ?? series[0];
+/** Up to four expiries spread out in time: the nearest, then the first at least 2, 5 and 12 days out. */
+function pickDates(series: OptSeriesInfo[], now: number): OptSeriesInfo[] {
+  const out: OptSeriesInfo[] = [];
+  for (const days of [0, 2, 5, 12]) {
+    const s = series.find(x => x.expiry - now >= days * 24 * H && !out.includes(x));
+    if (s) out.push(s);
+  }
+  return out;
+}
+
+function RangeHero({ sym, series: all, now, assetPicker }: { sym: string; series: OptSeriesInfo[]; now: number; assetPicker: ReactNode }) {
+  const [series] = useState(() => pickDates(all, now));
+  const [key, setKey] = useState(() => (series[1] ?? series[0]).key);
+  const s = all.find(x => x.key === key) ?? series[0];
   const c = s.curve;
   const sd = c.fwd * c.atmIv * Math.sqrt(Math.max(s.expiry - now, 60_000) / YEAR_MS);
   const step = niceStep(sd / 8);
@@ -82,13 +95,13 @@ function RangeHero({ sym, series, now, assetPicker }: { sym: string; series: Opt
       <div className="picker-top">
         {assetPicker}
         <div className="exp-pills" role="radiogroup" aria-label="Settlement date">
-          {series.slice(0, 6).map(x => (
-            <button key={x.key} role="radio" aria-checked={x.key === s.key} className={x.key === s.key ? 'on' : ''} onClick={() => setKey(x.key)}>
-              {dayFmt.format(x.expiry)}
+          {series.map(x => (
+            <button key={x.key} role="radio" aria-checked={x.key === s.key} className={x.key === s.key ? 'on' : ''} onClick={() => setKey(x.key)} title={`Settles ${fmtWhen(x.expiry)}`}>
+              {dayLabel(x.expiry)}
             </button>
           ))}
         </div>
-        <span className="muted small">{sym} now <b className="num">{fmtPx(c.fwd, dec)}</b> · settles {fmtWhen(s.expiry)}</span>
+        <span className="muted small" title={`Settles ${fmtWhen(s.expiry)}`}>{sym} now <b className="num">{fmtPx(c.fwd, dec)}</b></span>
       </div>
 
       <svg
