@@ -1,0 +1,17 @@
+# Render Blueprint: one free web service that serves the site and the API (see README, "Deploy").
+services:
+  - type: web
+    name: bracket
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/markets
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # Hypercall's terms bar redistributing its data, so the public site doesn't poll it.
+      - key: HYPERCALL_OFF
+        value: "1"

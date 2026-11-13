@@ -29,6 +29,8 @@ export const config = {
   /** Derive chain refresh (per expiry) and instrument-list refresh. */
   derivePollMs: num(process.env.DERIVE_POLL_MS, 15_000),
   deriveListMs: 10 * 60_000,
+  /** Skip Hypercall (its terms bar redistributing its data, so the public deploy turns it off). */
+  hypercallOff: process.env.HYPERCALL_OFF === '1',
   /** Hypercall is research-only (Phase 0); one call returns every expiry, ~650 KB. */
   hypercallPollMs: num(process.env.HYPERCALL_POLL_MS, 60_000),
   /** Phase 0 hedge-cost sampling interval and retention (~3 MB/day at these defaults). */

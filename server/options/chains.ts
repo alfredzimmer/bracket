@@ -171,7 +171,7 @@ function loop(fn: () => Promise<void>, every: number) {
 export async function startOptionFeeds() {
   // Wait for the first Derive pass so options-backed series exist as soon as the API is up.
   await loop(pollDerive, config.derivePollMs);
-  loop(pollHypercall, config.hypercallPollMs);
+  if (!config.hypercallOff) loop(pollHypercall, config.hypercallPollMs);
   setInterval(prune, 3_600_000).unref();
   const n = liveSeries(Date.now()).length;
   console.log(`[options] ${n} options-backed series from Derive`);
